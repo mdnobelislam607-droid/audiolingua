@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AudioLingua AI</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%236d5efc'/%3E%3Cpath d='M14 32h4v0M20 24v16M28 18v28M36 24v16M44 28v8M50 30v4' stroke='white' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root{--bg:#f5f6fb;--card:#fff;--tx:#1b1d2a;--mut:#6b7086;--pri:#6d5efc;--bd:#e1e3ef;--err:#d93651;--ok:#1f9d63}
+[data-theme=dark]{--bg:#12131c;--card:#1c1e2b;--tx:#eceefa;--mut:#9a9fb8;--bd:#2d3044;--pri:#8b7fff}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+main{max-width:900px;margin:0 auto;padding:12px}
+header{display:flex;align-items:center;gap:10px;padding:8px 0}
+header h1{font-size:1.3rem;margin:0;flex:1}
+.logo{width:36px;height:36px;border-radius:10px;background:var(--pri);display:grid;place-items:center;color:#fff;font-weight:700}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin:12px 0}
+button{font:inherit;border:0;border-radius:10px;padding:10px 14px;background:var(--pri);color:#fff;cursor:pointer}
+button.sec{background:transparent;color:var(--tx);border:1px solid var(--bd)}
+button:disabled{opacity:.5;cursor:not-allowed}
+input,select{font:inherit;width:100%;padding:10px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)}
+.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1;min-width:140px}
+label{font-size:.85rem;color:var(--mut)}
+#drop{border:2px dashed var(--bd);border-radius:12px;padding:18px;text-align:center}
+#drop.over{border-color:var(--pri)}
+audio{width:100%;margin-top:8px}
+.bar{height:10px;background:var(--bd);border-radius:6px;overflow:hidden;margin-top:8px}
+.bar>div{height:100%;width:0;background:var(--pri);transition:width .3s}
+.panels{display:grid;grid-template-columns:1fr;gap:10px}
+@media(min-width:700px){.panels{grid-template-columns:1fr 1fr}}
+.txt{white-space:pre-wrap;min-height:90px;max-height:260px;overflow:auto;background:var(--bg);border-radius:10px;padding:10px;border:1px solid var(--bd)}
+#msg{margin-top:8px;font-size:.92rem}.err{color:var(--err)}.ok{color:var(--ok)}
+small,.note{color:var(--mut);font-size:.82rem}
+.hide{display:none}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div class="logo">AL</div><h1>AudioLingua AI</h1>
+  <button class="sec" id="theme" aria-label="Toggle theme">🌓</button>
+</header>
+
+<div class="card">
+  <div id="drop">
+    <button id="pick">Upload Audio</button>
+    <input id="file" type="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.opus,.flac,.webm" class="hide">
+    <p class="note">or drag &amp; drop here · max 8 MB (about 5–8 min of speech)</p>
+  </div>
+  <div id="info" class="hide">
+    <b id="fname"></b><br><small id="fmeta"></small>
+    <audio id="orig" controls preload="metadata"></audio>
+    <div class="row" style="margin-top:8px">
+      <button class="sec" id="ostop">⏹ Stop</button>
+      <button class="sec" id="clear">🗑 Delete file</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="row">
+    <div><label for="src">Original language</label><input id="src" list="srcl" value="Auto Detect"><datalist id="srcl"></datalist></div>
+    <div><label for="tgt">Target language</label><input id="tgt" list="tgtl" value="English"><datalist id="tgtl"></datalist></div>
+  </div>
+  <small class="note">Tip: tap a field, clear it, and type to search.</small>
+  <div class="row" style="margin-top:10px">
+    <button id="go" disabled>Translate Audio</button>
+    <button class="sec" id="reset">Reset</button>
+  </div>
+  <div class="bar"><div id="prog"></div></div>
+  <div id="msg"></div>
+</div>
+
+<div class="card">
+  <div class="panels">
+    <div><b>Original transcript</b><div class="txt" id="t1"></div></div>
+    <div><b>Translated transcript</b><div class="txt" id="t2"></div></div>
+  </div>
+</div>
+
+<div class="card">
+  <b>Translated audio</b>
+  <p class="note">This is <b>text-to-speech in a standard voice</b>. It does not preserve the original speaker's voice.</p>
+  <audio id="out" controls class="hide"></audio>
+  <div class="row" style="margin-top:8px">
+    <button class="sec hide" id="speak">▶ Speak with phone voice</button>
+    <button class="sec hide" id="ostop2">⏹ Stop</button>
+    <button id="dl" class="hide">⬇ Download Translated Audio</button>
+  </div>
+  <div id="ttsnote" class="note"></div>
+</div>
+
+<p class="note">Powered by Cloudflare Workers AI (Whisper, M2M100, MeloTTS) on the free tier (daily limit applies). Audio is processed in memory and not stored.</p>
+</main>
+
+<script>
+const LANGS = [["Bengali","bn"],["English","en"],["Hindi","hi"],["Urdu","ur"],["Arabic","ar"],["Spanish","es"],["French","fr"],["German","de"],["Chinese","zh"],["Japanese","ja"],["Korean","ko"],["Portuguese","pt"],["Russian","ru"],["Italian","it"],["Turkish","tr"],["Indonesian","id"],["Malay","ms"],["Vietnamese","vi"],["Thai","th"],["Persian","fa"],["Tamil","ta"],["Telugu","te"],["Marathi","mr"],["Nepali","ne"],["Dutch","nl"],["Polish","pl"],["Ukrainian","uk"],["Swahili","sw"]];
+const SPEECH_LOCALE = {bn:"bn-BD",en:"en-US",hi:"hi-IN",ur:"ur-PK",ar:"ar-SA",es:"es-ES",fr:"fr-FR",de:"de-DE",zh:"zh-CN",ja:"ja-JP",ko:"ko-KR",pt:"pt-BR",ru:"ru-RU",it:"it-IT",tr:"tr-TR",id:"id-ID",ms:"ms-MY",vi:"vi-VN",th:"th-TH",fa:"fa-IR",ta:"ta-IN",te:"te-IN",mr:"mr-IN",ne:"ne-NP",nl:"nl-NL",pl:"pl-PL",uk:"uk-UA",sw:"sw-KE"};
+const MAX = 8*1024*1024;
+const $ = id => document.getElementById(id);
+let file=null, origUrl=null, outUrl=null, outBlob=null, translated="", tgtCode="en", busy=false;
+
+$("srcl").innerHTML = '<option value="Auto Detect">'+LANGS.map(l=>`<option value="${l[0]}">`).join("");
+$("tgtl").innerHTML = LANGS.map(l=>`<option value="${l[0]}">`).join("");
+const code = name => (LANGS.find(l=>l[0].toLowerCase()===name.trim().toLowerCase())||[])[1];
+
+// theme
+const saved = (()=>{try{return localStorage.getItem("theme")}catch(e){return null}})();
+document.documentElement.dataset.theme = saved || (matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");
+$("theme").onclick=()=>{const t=document.documentElement.dataset.theme==="dark"?"light":"dark";document.documentElement.dataset.theme=t;try{localStorage.setItem("theme",t)}catch(e){}};
+
+const say=(m,c)=>{$("msg").textContent=m;$("msg").className=c||""};
+const prog=p=>$("prog").style.width=p+"%";
+const fmtT=s=>isFinite(s)?Math.floor(s/60)+":"+String(Math.floor(s%60)).padStart(2,"0"):"?";
+
+// file handling
+$("pick").onclick=()=>$("file").click();
+$("file").onchange=e=>e.target.files[0]&&setFile(e.target.files[0]);
+const drop=$("drop");
+["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over")}));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over")}));
+drop.addEventListener("drop",e=>e.dataTransfer.files[0]&&setFile(e.dataTransfer.files[0]));
+
+function setFile(f){
+  const okExt=/\.(mp3|wav|m4a|aac|ogg|opus|flac|webm|mp4)$/i.test(f.name);
+  if(!(f.type.startsWith("audio/")||okExt)) return say("Unsupported file. Please choose an audio file (MP3, WAV, M4A, AAC, OGG...).","err");
+  if(f.size>MAX) return say("File is too large ("+(f.size/1048576).toFixed(1)+" MB). Maximum is 8 MB. Please trim or compress it.","err");
+  if(f.size===0) return say("This file is empty.","err");
+  clearOut(); file=f;
+  if(origUrl) URL.revokeObjectURL(origUrl);
+  origUrl=URL.createObjectURL(f); $("orig").src=origUrl;
+  $("fname").textContent=f.name;
+  $("fmeta").textContent=(f.size/1048576).toFixed(2)+" MB · duration: …";
+  $("orig").onloadedmetadata=()=>$("fmeta").textContent=(f.size/1048576).toFixed(2)+" MB · duration: "+fmtT($("orig").duration);
+  $("orig").onerror=()=>say("Your browser can't play this file. Upload may still work.","err");
+  $("info").classList.remove("hide"); $("go").disabled=false; say("");
+}
+$("ostop").onclick=()=>{$("orig").pause();$("orig").currentTime=0};
+$("clear").onclick=resetAll; $("reset").onclick=resetAll;
+
+function clearOut(){
+  $("t1").textContent="";$("t2").textContent="";prog(0);translated="";outBlob=null;
+  if(outUrl){URL.revokeObjectURL(outUrl);outUrl=null}
+  ["out","dl","speak","ostop2"].forEach(i=>$(i).classList.add("hide"));
+  $("ttsnote").textContent="";speechSynthesis&&speechSynthesis.cancel();
+}
+function resetAll(){
+  clearOut(); file=null; if(origUrl){URL.revokeObjectURL(origUrl);origUrl=null}
+  $("orig").removeAttribute("src");$("orig").load();$("file").value="";
+  $("info").classList.add("hide");$("go").disabled=true;say("");
+}
+
+// helpers
+function chunks(text,max=350){
+  const parts=text.replace(/\s+/g," ").match(/[^.!?।۔。！？]+[.!?।۔。！？]*/g)||[text];
+  const out=[];let cur="";
+  for(let p of parts){
+    p=p.trim(); if(!p) continue;
+    while(p.length>max){ out.push(p.slice(0,max)); p=p.slice(max); }
+    if((cur+" "+p).trim().length>max){ if(cur) out.push(cur); cur=p; } else cur=(cur+" "+p).trim();
+  }
+  if(cur) out.push(cur); return out;
+}
+async function api(path,opts,timeout=120000){
+  const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(),timeout);
+  opts.headers=Object.assign({},opts.headers);
+  try{const ac=sessionStorage.getItem("ac"); if(ac) opts.headers["x-access-code"]=ac}catch(e){}
+  try{
+    let r=await fetch(path,{...opts,signal:ctrl.signal});
+    if(r.status===401){
+      const c=prompt("Enter access code:"); if(!c) throw new Error("Access code required.");
+      try{sessionStorage.setItem("ac",c)}catch(e){}
+      opts.headers["x-access-code"]=c; r=await fetch(path,{...opts,signal:ctrl.signal});
+    }
+    const d=await r.json().catch(()=>({error:"Bad server response."}));
+    if(!r.ok){const e=new Error(d.error||("Error "+r.status));e.status=r.status;throw e}
+    return d;
+  }catch(e){
+    if(e.name==="AbortError") throw new Error("Timed out. Try a shorter audio file.");
+    if(e instanceof TypeError) throw new Error("Network error. Check your internet and try again.");
+    throw e;
+  }finally{clearTimeout(t)}
+}
+const b64ToBytes=b=>Uint8Array.from(atob(b),c=>c.charCodeAt(0));
+
+// main workflow
+$("go").onclick=async()=>{
+  if(busy||!file) return;
+  const sName=$("src").value, tName=$("tgt").value;
+  const sCode = sName.trim().toLowerCase()==="auto detect" ? "auto" : code(sName);
+  tgtCode = code(tName);
+  if(!sCode) return say("Pick the original language from the list (or Auto Detect).","err");
+  if(!tgtCode) return say("Pick the target language from the list.","err");
+  busy=true; $("go").disabled=true; clearOut();
+  try{
+    say("Step 1/3: Transcribing speech…"); prog(10);
+    const tr=await api("/api/transcribe",{method:"POST",headers:{"x-lang":sCode},body:file},150000);
+    $("t1").textContent=tr.text; prog(40);
+    const srcCode = sCode==="auto" ? tr.language : sCode;
+    if(!srcCode||!LANGS.some(l=>l[1]===srcCode)) throw new Error("Could not detect the language. Please choose the original language manually.");
+
+    say("Step 2/3: Translating…");
+    const parts=chunks(tr.text); const tp=[];
+    for(let i=0;i<parts.length;i++){
+      const r=await api("/api/translate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({text:parts[i],source:srcCode,target:tgtCode})},60000)
+        .catch(e=>{throw new Error("Translation failed: "+e.message)});
+      tp.push(r.text); $("t2").textContent=tp.join(" "); prog(40+Math.round(30*(i+1)/parts.length));
+    }
+    translated=tp.join(" ");
+    if(!translated.trim()) throw new Error("Translation was empty.");
+
+    say("Step 3/3: Generating spoken audio…");
+    const tparts=chunks(translated,300); const bytes=[];
+    try{
+      for(let i=0;i<tparts.length;i++){
+        const r=await api("/api/tts",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({text:tparts[i],lang:tgtCode})},60000);
+        bytes.push(b64ToBytes(r.audio)); prog(70+Math.round(30*(i+1)/tparts.length));
+      }
+      outBlob=new Blob(bytes,{type:"audio/mpeg"}); outUrl=URL.createObjectURL(outBlob);
+      $("out").src=outUrl; ["out","dl"].forEach(i=>$(i).classList.remove("hide"));
+      say("Done! Listen or download below.","ok");
+    }catch(e){
+      if(e.message==="TTS_UNSUPPORTED"||e.status===501){
+        $("speak").classList.remove("hide");$("ostop2").classList.remove("hide");
+        $("ttsnote").textContent="The free server voice does not support this language (it supports English, Spanish, French, Chinese, Japanese, Korean). You can still hear it with your phone's built-in voice, but it cannot be downloaded.";
+        prog(100); say("Translation done. Server voice unavailable for this language.","ok");
+      } else { prog(70); say("Translation done, but voice generation failed: "+e.message,"err"); }
+    }
+  }catch(e){ say(e.message,"err"); prog(0); }
+  finally{ busy=false; $("go").disabled=!file; }
+};
+
+$("speak").onclick=()=>{
+  if(!("speechSynthesis" in window)) return say("Your browser has no built-in voice.","err");
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(translated); u.lang=SPEECH_LOCALE[tgtCode]||tgtCode;
+  speechSynthesis.speak(u);
+};
+$("ostop2").onclick=()=>speechSynthesis.cancel();
+$("dl").onclick=()=>{ if(!outBlob) return; const a=document.createElement("a"); a.href=outUrl; a.download="translated-"+tgtCode+".mp3"; a.click(); };
+</script>
+</body>
+  </html>
