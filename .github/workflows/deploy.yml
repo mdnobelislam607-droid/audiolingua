@@ -13,6 +13,10 @@ jobs:
           T: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           A: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          export CLOUDFLARE_API_TOKEN="$(printf '%s' "$T" | tr -d '[:space:]')"
-          export CLOUDFLARE_ACCOUNT_ID="$(printf '%s' "$A" | tr -d '[:space:]')"
+          TOKEN="$(printf '%s' "$T" | grep -oE 'cfut_[A-Za-z0-9]{48}' | head -1)"
+          ACCT="$(printf '%s' "$A" | grep -oE '[0-9a-f]{32}' | head -1)"
+          [ -n "$TOKEN" ] || { echo "TOKEN secret has no valid token"; exit 1; }
+          [ -n "$ACCT" ] || { echo "ACCOUNT_ID secret has no valid id"; exit 1; }
+          export CLOUDFLARE_API_TOKEN="$TOKEN"
+          export CLOUDFLARE_ACCOUNT_ID="$ACCT"
           npx --yes wrangler@4 deploy
